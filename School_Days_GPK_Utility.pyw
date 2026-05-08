@@ -48,7 +48,7 @@ def parse_key(key_str: str) -> bytes:
     key_str = key_str.replace(" ", "").replace("-", "")
     key = bytes.fromhex(key_str)
     if len(key) != 16:
-        raise ValueError("La clé doit faire exactement 16 octets.")
+        raise ValueError("The key must be exactly 16 bytes.")
     return key
 
 
@@ -89,37 +89,37 @@ class GpkArchive:
 
     def open(self):
         if len(self.blob) < 32:
-            raise ValueError("Fichier trop petit.")
+            raise ValueError("File too small.")
 
         self.footer_offset = len(self.blob) - 32
 
         if self.blob[self.footer_offset:self.footer_offset + 12] != MAGIC1:
-            raise ValueError("Footer invalide : STKFile0PIDX absent.")
+            raise ValueError("Invalid footer: STKFile0PIDX missing.")
         if self.blob[self.footer_offset + 16:self.footer_offset + 32] != MAGIC2:
-            raise ValueError("Footer invalide : STKFile0PACKFILE absent.")
+            raise ValueError("Invalid footer: STKFile0PACKFILE missing.")
 
         self.index_size = struct.unpack_from("<I", self.blob, self.footer_offset + 12)[0]
         self.index_offset = self.footer_offset - self.index_size
 
         if self.index_offset < 0:
-            raise ValueError("Index hors limites.")
+            raise ValueError("Index out of bounds.")
 
         enc_index = self.blob[self.index_offset:self.footer_offset]
         plain = xor_crypt(enc_index, self.key, 0)
 
         if len(plain) < 4:
-            raise ValueError("Index trop petit.")
+            raise ValueError("Index too small.")
 
         comp = plain[4:]
         try:
             raw_index = zlib.decompress(comp)
         except zlib.error as e:
-            raise ValueError("Impossible de décompresser l'index: %s" % e)
+            raise ValueError("Could not decompress index: %s" % e)
 
         self.entries = self._parse_index(raw_index)
 
         if not self.entries:
-            raise ValueError("Aucune entrée trouvée.")
+            raise ValueError("No entries found.")
 
         self.prefix_len = min(e.offset for e in self.entries)
         return self
@@ -139,12 +139,12 @@ class GpkArchive:
 
             name_bytes = bio.read(name_len_chars * 2)
             if len(name_bytes) != name_len_chars * 2:
-                raise ValueError("Index tronqué sur le nom.")
+                raise ValueError("Truncated index while reading name.")
             name = name_bytes.decode("utf-16-le")
 
             fixed = bio.read(23)
             if len(fixed) != 23:
-                raise ValueError("Index tronqué sur les champs fixes.")
+                raise ValueError("Truncated index while reading fixed fields.")
 
             unk1, unk2, offset, size, unk3, unpacked_size, header_len = struct.unpack(
                 "<ihIIiIB", fixed
@@ -152,7 +152,7 @@ class GpkArchive:
 
             header = bio.read(header_len)
             if len(header) != header_len:
-                raise ValueError("Index tronqué sur le header.")
+                raise ValueError("Truncated index while reading header.")
 
             entries.append(GpkEntry(
                 name=name,
@@ -205,13 +205,13 @@ def build_index(entries: List[GpkEntry]) -> bytes:
 def inspect_gpk(gpk_path: str, key: bytes):
     arc = GpkArchive(gpk_path, key).open()
     lines = []
-    lines.append("Fichier          : %s" % arc.path)
-    lines.append("Taille           : %d" % len(arc.blob))
+    lines.append("File             : %s" % arc.path)
+    lines.append("Size             : %d" % len(arc.blob))
     lines.append("Footer offset    : %d" % arc.footer_offset)
     lines.append("Index offset     : %d" % arc.index_offset)
     lines.append("Index size       : %d" % arc.index_size)
-    lines.append("Préfixe hybride  : %d" % arc.prefix_len)
-    lines.append("Entrées          : %d" % len(arc.entries))
+    lines.append("Hybrid prefix    : %d" % arc.prefix_len)
+    lines.append("Entries          : %d" % len(arc.entries))
     lines.append("")
 
     for i, e in enumerate(arc.entries[:30]):
@@ -256,7 +256,7 @@ def unpack_gpk(gpk_path: str, out_dir: str, key: bytes):
         encoding="utf-8"
     )
 
-    return "[OK] Extraction terminée : %s\n[OK] Préfixe sauvegardé : %d octets\n[OK] Entrées : %d" % (
+    return "[OK] Extraction complete: %s\n[OK] Prefix saved: %d bytes\n[OK] Entries: %d" % (
         out_dir, arc.prefix_len, len(arc.entries)
     )
 
@@ -298,7 +298,7 @@ def repack_gpk(original_gpk: str, input_dir: str, output_gpk: str, key: bytes):
                 header_len = len(old.header)
 
                 if header_len > len(z):
-                    raise ValueError("Header trop long pour l'entrée %s" % old.name)
+                    raise ValueError("Header too long for entry %s" % old.name)
 
                 new_entry.header = z[:header_len]
 
@@ -330,7 +330,7 @@ def repack_gpk(original_gpk: str, input_dir: str, output_gpk: str, key: bytes):
 
     Path(output_gpk).write_bytes(out.getvalue())
 
-    return "[OK] Repack terminé : %s\n[OK] Préfixe conservé : %d octets\n[OK] Entrées écrites : %d" % (
+    return "[OK] Repack complete: %s\n[OK] Prefix kept: %d bytes\n[OK] Entries written: %d" % (
         output_gpk, len(prefix), len(new_entries)
     )
 
@@ -362,37 +362,37 @@ class App(tk.Tk):
         title = ttk.Label(main, text="School Days GPK Utility", font=("Segoe UI", 16, "bold"))
         title.pack(anchor="w", pady=(0, 10))
 
-        form = ttk.LabelFrame(main, text="Paramètres", padding=10)
+        form = ttk.LabelFrame(main, text="Settings", padding=10)
         form.pack(fill="x")
         form.columnconfigure(1, weight=1)
 
-        ttk.Label(form, text="Clé:").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Label(form, text="Key:").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
         self.key_var = tk.StringVar(value=DEFAULT_KEY)
         ttk.Entry(form, textvariable=self.key_var).grid(row=0, column=1, columnspan=2, sticky="ew", pady=4)
 
         ttk.Label(form, text="GPK:").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
         self.gpk_var = tk.StringVar()
         ttk.Entry(form, textvariable=self.gpk_var).grid(row=1, column=1, sticky="ew", pady=4)
-        ttk.Button(form, text="Parcourir", command=self.browse_gpk).grid(row=1, column=2, padx=(8, 0), pady=4)
+        ttk.Button(form, text="Browse", command=self.browse_gpk).grid(row=1, column=2, padx=(8, 0), pady=4)
 
-        ttk.Label(form, text="Dossier:").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Label(form, text="Folder:").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
         self.dir_var = tk.StringVar()
         ttk.Entry(form, textvariable=self.dir_var).grid(row=2, column=1, sticky="ew", pady=4)
-        ttk.Button(form, text="Parcourir", command=self.browse_dir).grid(row=2, column=2, padx=(8, 0), pady=4)
+        ttk.Button(form, text="Browse", command=self.browse_dir).grid(row=2, column=2, padx=(8, 0), pady=4)
 
-        ttk.Label(form, text="Sortie GPK:").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
+        ttk.Label(form, text="Output GPK:").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
         self.out_var = tk.StringVar()
         ttk.Entry(form, textvariable=self.out_var).grid(row=3, column=1, sticky="ew", pady=4)
-        ttk.Button(form, text="Parcourir", command=self.browse_out).grid(row=3, column=2, padx=(8, 0), pady=4)
+        ttk.Button(form, text="Browse", command=self.browse_out).grid(row=3, column=2, padx=(8, 0), pady=4)
 
         btns = ttk.Frame(main)
         btns.pack(fill="x", pady=(12, 10))
         ttk.Button(btns, text="Inspect", command=self.run_inspect).pack(side="left")
         ttk.Button(btns, text="Unpack", command=self.run_unpack).pack(side="left", padx=8)
         ttk.Button(btns, text="Repack", command=self.run_repack).pack(side="left")
-        ttk.Button(btns, text="Vider le log", command=self.clear_log).pack(side="right")
+        ttk.Button(btns, text="Clear log", command=self.clear_log).pack(side="right")
 
-        log_frame = ttk.LabelFrame(main, text="Journal", padding=8)
+        log_frame = ttk.LabelFrame(main, text="Log", padding=8)
         log_frame.pack(fill="both", expand=True)
         self.log = tk.Text(log_frame, wrap="word", height=20, font=("Consolas", 10))
         self.log.pack(side="left", fill="both", expand=True)
@@ -418,7 +418,7 @@ class App(tk.Tk):
             lbl = ttk.Label(self.bottom_frame, image=self.logo_img)
             lbl.pack(anchor="center")
         except Exception as e:
-            self.write_log("[WARN] Impossible de charger TITLE_AC.PNG : %s\n" % e)
+            self.write_log("[WARN] Could not load TITLE_AC.PNG: %s\n" % e)
 
     def browse_gpk(self):
         path = filedialog.askopenfilename(filetypes=[("GPK files", "*.gpk"), ("All files", "*.*")])
@@ -453,27 +453,27 @@ class App(tk.Tk):
         try:
             gpk = self.gpk_var.get().strip()
             if not gpk:
-                raise ValueError("Choisis un fichier GPK.")
+                raise ValueError("Choose a GPK file.")
             result = inspect_gpk(gpk, self._get_key())
             self.write_log(result + "\n\n")
         except Exception as e:
-            self.write_log("[ERREUR] %s\n%s\n" % (e, traceback.format_exc()))
-            messagebox.showerror("Erreur", str(e))
+            self.write_log("[ERROR] %s\n%s\n" % (e, traceback.format_exc()))
+            messagebox.showerror("Error", str(e))
 
     def run_unpack(self):
         try:
             gpk = self.gpk_var.get().strip()
             out_dir = self.dir_var.get().strip()
             if not gpk:
-                raise ValueError("Choisis un fichier GPK.")
+                raise ValueError("Choose a GPK file.")
             if not out_dir:
-                raise ValueError("Choisis un dossier de sortie.")
+                raise ValueError("Choose an output folder.")
             result = unpack_gpk(gpk, out_dir, self._get_key())
             self.write_log(result + "\n\n")
-            messagebox.showinfo("Terminé", "Unpack terminé.")
+            messagebox.showinfo("Done", "Unpack complete.")
         except Exception as e:
-            self.write_log("[ERREUR] %s\n%s\n" % (e, traceback.format_exc()))
-            messagebox.showerror("Erreur", str(e))
+            self.write_log("[ERROR] %s\n%s\n" % (e, traceback.format_exc()))
+            messagebox.showerror("Error", str(e))
 
     def run_repack(self):
         try:
@@ -481,17 +481,17 @@ class App(tk.Tk):
             input_dir = self.dir_var.get().strip()
             output_gpk = self.out_var.get().strip()
             if not original_gpk:
-                raise ValueError("Choisis le GPK original.")
+                raise ValueError("Choose the original GPK.")
             if not input_dir:
-                raise ValueError("Choisis le dossier à repacker.")
+                raise ValueError("Choose the folder to repack.")
             if not output_gpk:
-                raise ValueError("Choisis le fichier de sortie.")
+                raise ValueError("Choose the output file.")
             result = repack_gpk(original_gpk, input_dir, output_gpk, self._get_key())
             self.write_log(result + "\n\n")
-            messagebox.showinfo("Terminé", "Repack terminé.")
+            messagebox.showinfo("Done", "Repack complete.")
         except Exception as e:
-            self.write_log("[ERREUR] %s\n%s\n" % (e, traceback.format_exc()))
-            messagebox.showerror("Erreur", str(e))
+            self.write_log("[ERROR] %s\n%s\n" % (e, traceback.format_exc()))
+            messagebox.showerror("Error", str(e))
 
 
 def main():
